@@ -1,1 +1,11 @@
-spring.application.name=RayVue-backend
+spring:
+  application:
+    name: RayVue-backend
+  security:
+    jwt:
+      key: liMingZhiYi
+      expireTime: 7
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
