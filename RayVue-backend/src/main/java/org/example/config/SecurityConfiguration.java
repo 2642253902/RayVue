@@ -5,10 +5,13 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.example.entity.RestBean;
+import org.example.entity.dto.Account;
 import org.example.entity.vo.response.AuthorizeVO;
 import org.example.filter.JwtAuthorizeFilter;
+import org.example.service.AccountService;
 import org.example.utils.JwtUtils;
 import org.jspecify.annotations.Nullable;
+import org.springframework.beans.BeanUtils;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.access.AccessDeniedException;
@@ -19,6 +22,7 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import tools.jackson.databind.util.BeanUtil;
 
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -31,6 +35,9 @@ public class SecurityConfiguration {
 
     @Resource
     JwtAuthorizeFilter jwtAuthorizeFilter;
+
+    @Resource
+    AccountService accountService;
 
     /*
      * Spring Security 的核心配置。
@@ -68,8 +75,10 @@ public class SecurityConfiguration {
                                 this.onLogoutSuccess(request, response, authentication))
                 )
                 .exceptionHandling(excption -> excption
+                        // 未登录访问受保护接口时触发：比如没有带 token，或 token 无效。
                         .authenticationEntryPoint((request, response, authException) ->
                                 this.commence(request, response, authException))
+                        // 已登录但权限不足时触发：比如普通用户访问管理员接口。
                         .accessDeniedHandler((request, response, accessDeniedException) ->
                                 this.handle(request, response, accessDeniedException)
                         ))
@@ -79,6 +88,8 @@ public class SecurityConfiguration {
                         // 不用服务器 Session 保存登录态；每次请求都靠 JWT 证明身份。
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
+                // 让 JWT 过滤器先尝试从请求头解析 token，并把解析出的用户身份放进 SecurityContext。
+                // 后面的权限判断就可以把“带了合法 JWT 的请求”当成已登录请求处理。
                 .addFilterBefore(jwtAuthorizeFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }
@@ -89,13 +100,14 @@ public class SecurityConfiguration {
                                         Authentication authentication) throws IOException, ServletException {
         response.setContentType("application/json;charset=UTF-8");
         User user = (User) authentication.getPrincipal();
-        // TODO 这里的 id 和 username 目前写死了；等接数据库用户表后，应改成真实用户信息。
-        String token = jwtUtils.creatJwt(user, 1, "小明");
-        AuthorizeVO authorizeVO = new AuthorizeVO();
-        authorizeVO.setExpireTime(jwtUtils.expireTime());
-        authorizeVO.setRole("");
-        authorizeVO.setToken(token);
-        authorizeVO.setUsername("小明");
+        Account account = accountService.findAccountByUsernameOrEmail(user.getUsername());
+        String token = jwtUtils.creatJwt(user, account.getId(), account.getRole());
+//        AuthorizeVO authorizeVO = new AuthorizeVO();
+//        BeanUtils.copyProperties(account, authorizeVO);
+        AuthorizeVO authorizeVO = account.asViewObject(AuthorizeVO.class, v -> {
+            v.setExpireTime(jwtUtils.expireTime());
+            v.setToken(token);
+        });
         response.getWriter().write(RestBean.success(authorizeVO).asJsonString());
     }
 
@@ -106,6 +118,7 @@ public class SecurityConfiguration {
         response.setContentType("application/json;charset=UTF-8");
         PrintWriter writer = response.getWriter();
         String authorization = request.getHeader("Authorization");
+        // 这里通常是把当前 token 加入黑名单或标记为失效，防止登出后 token 在过期前继续使用。
         if (jwtUtils.invalidateJwt(authorization)) {
             writer.write(RestBean.success("登出成功").asJsonString());
         } else {
