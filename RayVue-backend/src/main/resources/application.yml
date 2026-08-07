@@ -5,6 +5,8 @@ spring:
     jwt:
       key: liMingZhiYi
       expireTime: 7
+    filter:
+      order: -100
   data:
     redis:
       host: 127.0.0.1

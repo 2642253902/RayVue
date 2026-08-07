@@ -2,8 +2,8 @@
 import { Lock, User } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { reactive, ref } from 'vue'
-import router from '@/router/index'
-import { login } from '@/net/index'
+import router from '@/router'
+import { login } from '@/net'
 const formRef = ref();
 
 const form = reactive({
@@ -24,7 +24,7 @@ const rule = reactive({
 function userLogin() {
     formRef.value.validate((valid) => {
         if (valid) {
-            login(form.username, form.password, form.remember, () => { })
+            login(form.username, form.password, form.remember, () => { router.push("/index") })
         }
     })
 }
@@ -39,7 +39,7 @@ function userLogin() {
         </div>
         <div style="margin-top: 50px">
             <el-form :model="form" :rules="rule" ref="formRef">
-                <el-form-item>
+                <el-form-item prop="username">
                     <el-input v-model="form.username" maxlength="10" placeholder="用户名/邮箱">
                         <template #prefix>
                             <el-icon>
@@ -48,7 +48,7 @@ function userLogin() {
                         </template>
                     </el-input>
                 </el-form-item>
-                <el-form-item>
+                <el-form-item prop="password">
                     <el-input v-model="form.password" maxlength="20" placeholder="密码" type="password">
                         <template #prefix>
                             <el-icon>
